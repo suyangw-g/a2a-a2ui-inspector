@@ -60,12 +60,12 @@ app.mount('/socket.io', socket_app)
 app.mount('/static', StaticFiles(directory='../frontend/public'), name='static')
 
 import os
-renderer_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../composer/samples/lit-basic-catalog/dist'))
-if os.path.exists(renderer_dist):
-    app.mount('/renderer', StaticFiles(directory=renderer_dist, html=True), name='renderer')
-    renderer_assets = os.path.join(renderer_dist, 'assets')
-    if os.path.exists(renderer_assets):
-        app.mount('/assets', StaticFiles(directory=renderer_assets), name='assets')
+local_renderer = os.path.abspath(os.path.join(os.path.dirname(__file__), '../frontend/public/renderer'))
+composer_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../composer/samples/lit-basic-catalog/dist'))
+renderer_dir = local_renderer if os.path.exists(local_renderer) else composer_dist
+
+if os.path.exists(renderer_dir):
+    app.mount('/renderer', StaticFiles(directory=renderer_dir, html=True), name='renderer')
 
 templates = Jinja2Templates(directory='../frontend/public')
 
