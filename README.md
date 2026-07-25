@@ -1,32 +1,69 @@
 # A2A Inspector (with A2UI Composer Integration)
 
-An enhanced inspection and validation tool for **Agent-to-Agent (A2A) protocol** communication, extended to render interactive **A2UI v0.9 protocol surfaces** inside sandboxed iframe containers using **A2UI Composer**.
+An inspection and validation tool for **Agent-to-Agent (A2A) protocol** communication, extended to render interactive **A2UI v0.9 protocol surfaces** inside sandboxed iframe containers using **A2UI Composer**.
 
 ---
 
-## 📁 Repository Directory Structure
+## 🛠️ Prerequisites & Setup
 
-- **[`backend/`](./backend/README.md)**: FastAPI application server, Socket.IO WebSocket handlers, and proxy endpoints for A2A agent cards.
-- **[`frontend/`](./frontend/README.md)**: Web interface source code, build scripts, TypeScript modules, styles, and static renderer assets.
-  - **[`frontend/src/`](./frontend/src/README.md)**: Modular TypeScript source code (A2UI transformers, surface UI components, full-page chat controller).
-  - **[`frontend/public/`](./frontend/public/README.md)**: Compiled bundle assets, HTML templates, CSS styles, and renderer assets.
-  - **[`frontend/public/renderer/`](./frontend/public/renderer/README.md)**: Self-contained A2UI Composer Lit renderer application dist package.
+- **Python 3.10+** & **[UV](https://docs.astral.sh/uv/)**
+- **Node.js 20+** & **npm**
 
 ---
 
-## 🚀 Quick Start Guide
+## 🚀 Running A2A Inspector & ADK Restaurant Finder Agent
 
-### 1. Build Frontend Bundle
+### 1. Build A2A Inspector Frontend
 ```bash
 cd frontend
 npm install
 npm run build
 ```
 
-### 2. Start Backend Server
+### 2. Start A2A Inspector Backend (Port 5001)
 ```bash
 cd backend
-uv run app.py
+uv run --default-index https://pypi.org/simple app.py
+```
+Access Inspector UI at **[http://127.0.0.1:5001](http://127.0.0.1:5001)**.
+
+### 3. Start A2UI ADK Restaurant Finder Agent (Port 10002)
+```bash
+# Navigate to the ADK restaurant finder sample directory
+cd samples/agent/adk/restaurant_finder  # (in a2ui repo)
+
+# Start the agent server
+uv run .
 ```
 
-Access the UI at **[http://127.0.0.1:5001](http://127.0.0.1:5001)**.
+---
+
+## 🧪 Testing A2UI in A2A Inspector (End-to-End Checklist)
+
+1. **Connect to Agent**:
+   - Open **[http://127.0.0.1:5001](http://127.0.0.1:5001)**.
+   - Enter `http://localhost:10002` in the **Agent URL** box and click **Connect**.
+   - Verify agent card metadata for *"Restaurant Agent"* appears with `https://a2ui.org/a2a-extension/a2ui/v0.9` capability.
+
+2. **Send Message**:
+   - Type `"Find me an Italian restaurant"` and press Enter.
+
+3. **Render A2UI Surface**:
+   - Verify A2UI surface cards render inside the sandboxed iframe container.
+   - Expand the 4 JSON inspectors (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`).
+
+4. **Multi-Turn & Surface Updates**:
+   - Type `"show me Chinese restaurants instead"` to verify surface model updates and new surface emissions.
+
+5. **User Action Interception**:
+   - Click a button (e.g. *"Reserve Table"*) inside a rendered A2UI surface card.
+   - Verify that the intercepted `SEND_TO_SERVER` action auto-populates the chat input box and logs in the Debug Console.
+
+---
+
+## 📁 Project Structure
+
+- **[`backend/`](./backend/README.md)**: FastAPI application server, Socket.IO handlers, and proxy endpoints.
+- **[`frontend/`](./frontend/README.md)**: Frontend source code, build scripts, and static renderer assets.
+  - **[`frontend/src/`](./frontend/src/README.md)**: TypeScript modules (`a2ui-transformer.ts`, `a2ui-surface.ts`, `full-page-chat.ts`).
+  - **[`frontend/public/renderer/`](./frontend/public/renderer/README.md)**: Embedded A2UI Composer Lit basic catalog renderer.
