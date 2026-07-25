@@ -1034,6 +1034,14 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       debugContent.appendChild(logEntry);
       debugContent.scrollTop = debugContent.scrollHeight;
+
+      // Populate chat input box with the intercepted action JSON for seamless agent interaction
+      const chatInput = document.getElementById('chat-input') as HTMLInputElement | HTMLTextAreaElement;
+      if (chatInput && data.payload) {
+        const actionData = data.payload.action || data.payload;
+        chatInput.value = typeof actionData === 'string' ? actionData : JSON.stringify(actionData);
+        chatInput.focus();
+      }
     }
   });
 
