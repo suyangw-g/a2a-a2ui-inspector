@@ -1,6 +1,10 @@
 import {io} from 'socket.io-client';
 import {marked} from 'marked';
 import DOMPurify from 'dompurify';
+import {RenderA2uiItem} from './types/a2ui';
+import {extractA2uiSurfaces} from './transformers/a2ui-transformer';
+import {createA2uiSurfaceComponent} from './components/a2ui-surface';
+import {setupFullPageChatToggle} from './components/full-page-chat';
 
 // A2A File types (matching spec)
 interface FileBase {
@@ -164,13 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const expandChatBtn = document.getElementById(
     'expand-chat-btn',
   ) as HTMLButtonElement;
-  if (expandChatBtn) {
-    expandChatBtn.addEventListener('click', () => {
-      document.body.classList.toggle('full-page-chat');
-      const isExpanded = document.body.classList.contains('full-page-chat');
-      expandChatBtn.textContent = isExpanded ? '🗗 Exit Fullscreen' : '⛶ Expand Chat';
-    });
-  }
+  setupFullPageChatToggle(expandChatBtn);
   const fileInput = document.getElementById('file-input') as HTMLInputElement;
   const attachBtn = document.getElementById('attach-btn') as HTMLButtonElement;
   const attachmentsPreview = document.getElementById(
@@ -1039,207 +1037,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  interface A2uiSurfaceGroup {
-    surfaceId: string;
-    catalogId?: string;
-    createSurface?: any;
-    updateComponents?: any;
-    updateDataModel?: any;
-    allMessages: any[];
-  }
-
-  function extractA2uiSurfaces(input: any): A2uiSurfaceGroup[] | null {
-    let items: any[] = [];
-    if (typeof input === 'string') {
-      try {
-        const parsed = JSON.parse(input);
-        if (Array.isArray(parsed)) items = parsed;
-        else if (typeof parsed === 'object' && parsed !== null) items = [parsed];
-      } catch {
-        const jsonCodeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
-        let match;
-        while ((match = jsonCodeBlockRegex.exec(input)) !== null) {
-          try {
-            const obj = JSON.parse(match[1]);
-            if (Array.isArray(obj)) items.push(...obj);
-            else if (typeof obj === 'object' && obj !== null) items.push(obj);
-          } catch (e) {}
-        }
-      }
-    } else if (Array.isArray(input)) {
-      items = input;
-    } else if (typeof input === 'object' && input !== null) {
-      items = [input];
-    }
-
-    const surfaceMap = new Map<string, A2uiSurfaceGroup>();
-
-    for (const item of items) {
-      if (!item || typeof item !== 'object') continue;
-
-      let surfaceId: string | null = null;
-      let catalogId: string | undefined = undefined;
-
-      if (item.createSurface) {
-        surfaceId = item.createSurface.surfaceId || item.surface;
-        catalogId = item.createSurface.catalogId;
-      } else if (item.updateComponents) {
-        surfaceId = item.updateComponents.surfaceId || item.surface;
-      } else if (item.updateDataModel) {
-        surfaceId = item.updateDataModel.surfaceId || item.surface;
-      } else if (item.surface) {
-        surfaceId = item.surface;
-      }
-
-      if (!surfaceId && item.version === 'v0.9') {
-        surfaceId = 'default-surface';
-      }
-
-      if (surfaceId) {
-        if (!surfaceMap.has(surfaceId)) {
-          surfaceMap.set(surfaceId, {
-            surfaceId,
-            catalogId: catalogId || 'https://a2ui.org/catalogs/basic.json',
-            allMessages: [],
-          });
-        }
-
-        const group = surfaceMap.get(surfaceId)!;
-        if (item.createSurface) {
-          group.createSurface = item.createSurface;
-          if (item.createSurface.catalogId) group.catalogId = item.createSurface.catalogId;
-        }
-        if (item.updateComponents) group.updateComponents = item.updateComponents;
-        if (item.updateDataModel) group.updateDataModel = item.updateDataModel;
-
-        const fullItem = {...item};
-        if (!fullItem.version) fullItem.version = 'v0.9';
-        group.allMessages.push(fullItem);
-      }
-    }
-
-    return surfaceMap.size > 0 ? Array.from(surfaceMap.values()) : null;
-  }
-
-  function renderA2uiSurfaceComponent(group: A2uiSurfaceGroup): HTMLElement {
-    const container = document.createElement('div');
-    container.className = 'a2ui-surface-card';
-    container.setAttribute('data-surface-id', group.surfaceId);
-
-    const header = document.createElement('div');
-    header.className = 'a2ui-surface-header';
-    header.innerHTML = `
-      <span class="a2ui-surface-badge">A2UI Surface</span>
-      <span class="a2ui-surface-id">ID: ${DOMPurify.sanitize(group.surfaceId)}</span>
-      <span class="a2ui-catalog-id">Catalog: ${DOMPurify.sanitize(group.catalogId || 'basic.json')}</span>
-    `;
-    container.appendChild(header);
-
-    const renderBox = document.createElement('div');
-    renderBox.className = 'a2ui-surface-rendered-container';
-
-    const iframe = document.createElement('iframe');
-    iframe.className = 'a2ui-surface-iframe';
-    iframe.src = '/renderer/index.html';
-    renderBox.appendChild(iframe);
-    container.appendChild(renderBox);
-
-    const payload: any[] = [];
-    
-    // 1. createSurface
-    let createDetails: any = null;
-    if (group.createSurface) {
-      createDetails = group.createSurface.createSurface || group.createSurface;
-    }
-    const surfaceId = createDetails?.surfaceId || group.surfaceId;
-    const catalogId = createDetails?.catalogId || group.catalogId || 'https://a2ui.org/catalogs/basic.json';
-
-    payload.push({
-      version: 'v0.9',
-      createSurface: {
-        surfaceId,
-        catalogId,
-      },
-    });
-
-    // 2. updateComponents
-    if (group.updateComponents) {
-      let rawComp = group.updateComponents.updateComponents || group.updateComponents;
-      const compList = Array.isArray(rawComp) ? rawComp : (rawComp.components || []);
-      payload.push({
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId,
-          components: compList,
-        },
-      });
-    }
-
-    // 3. updateDataModel
-    if (group.updateDataModel) {
-      let rawData = group.updateDataModel.updateDataModel || group.updateDataModel;
-      const dataObj = rawData.data !== undefined ? rawData.data : rawData;
-      payload.push({
-        version: 'v0.9',
-        updateDataModel: {
-          surfaceId,
-          data: dataObj,
-        },
-      });
-    }
-
-    activeSurfaceIframes.push({
-      surfaceId: group.surfaceId,
-      iframe,
-      payload,
-      loaded: false,
-    });
-
-    const jsonInspector = document.createElement('div');
-    jsonInspector.className = 'a2ui-json-inspector';
-
-    const createDetailsEl = document.createElement('details');
-    createDetailsEl.className = 'a2ui-json-details';
-    const createSummary = document.createElement('summary');
-    createSummary.textContent = '🔍 Surface Creation JSON (createSurface)';
-    createDetailsEl.appendChild(createSummary);
-    const createPre = document.createElement('pre');
-    createPre.innerHTML = `<code>${DOMPurify.sanitize(JSON.stringify(group.createSurface || payload[0].createSurface, null, 2))}</code>`;
-    createDetailsEl.appendChild(createPre);
-    jsonInspector.appendChild(createDetailsEl);
-
-    if (group.updateComponents || payload.find(p => p.updateComponents)) {
-      const compDetails = document.createElement('details');
-      compDetails.className = 'a2ui-json-details';
-      const compSummary = document.createElement('summary');
-      compSummary.textContent = '🧩 Surface Component Updates JSON (updateComponents)';
-      compDetails.appendChild(compSummary);
-      const compPre = document.createElement('pre');
-      compPre.innerHTML = `<code>${DOMPurify.sanitize(JSON.stringify(group.updateComponents || payload.find(p => p.updateComponents)?.updateComponents, null, 2))}</code>`;
-      compDetails.appendChild(compPre);
-      jsonInspector.appendChild(compDetails);
-    }
-
-    if (group.updateDataModel || payload.find(p => p.updateDataModel)) {
-      const dataDetails = document.createElement('details');
-      dataDetails.className = 'a2ui-json-details';
-      const dataSummary = document.createElement('summary');
-      dataSummary.textContent = '📊 Data Model Updates JSON (updateDataModel)';
-      dataDetails.appendChild(dataSummary);
-      const dataPre = document.createElement('pre');
-      dataPre.innerHTML = `<code>${DOMPurify.sanitize(JSON.stringify(group.updateDataModel || payload.find(p => p.updateDataModel)?.updateDataModel, null, 2))}</code>`;
-      dataDetails.appendChild(dataPre);
-      jsonInspector.appendChild(dataDetails);
-    }
-
-    container.appendChild(jsonInspector);
-    return container;
-  }
-
   const processPart = (p: any): string | HTMLElement | null => {
     if (p.text) {
-      const surfaces = extractA2uiSurfaces(p.text);
-      if (surfaces && surfaces.length > 0) {
+      const surfaceMap = extractA2uiSurfaces(p.text);
+      if (surfaceMap && surfaceMap.size > 0) {
         const wrapper = document.createElement('div');
         const introText = p.text.replace(/```(?:json)?[\s\S]*?```/g, '').trim();
         if (introText) {
@@ -1247,8 +1048,19 @@ document.addEventListener('DOMContentLoaded', () => {
           introDiv.innerHTML = DOMPurify.sanitize(marked.parse(introText) as string);
           wrapper.appendChild(introDiv);
         }
-        surfaces.forEach(s => {
-          wrapper.appendChild(renderA2uiSurfaceComponent(s));
+        surfaceMap.forEach((group) => {
+          const surfaceEl = createA2uiSurfaceComponent({
+            group,
+            onIframeCreated: (surfaceId, iframe, payload) => {
+              activeSurfaceIframes.push({
+                surfaceId,
+                iframe,
+                payload,
+                loaded: false,
+              });
+            },
+          });
+          wrapper.appendChild(surfaceEl);
         });
         return wrapper;
       }
