@@ -8,6 +8,7 @@
 import {
   A2uiSurfaceGroup,
   CreateSurfaceCommand,
+  DeleteSurfaceCommand,
   RenderA2uiItem,
   UpdateComponentsCommand,
   UpdateDataModelCommand,
@@ -55,11 +56,13 @@ export function extractA2uiSurfaces(
     const createSurface = item['createSurface'] as Record<string, unknown> | undefined;
     const updateComponents = item['updateComponents'] as Record<string, unknown> | undefined;
     const updateDataModel = item['updateDataModel'] as Record<string, unknown> | undefined;
+    const deleteSurface = item['deleteSurface'] as Record<string, unknown> | undefined;
 
     const surfaceId =
       (createSurface?.['surfaceId'] as string) ||
       (updateComponents?.['surfaceId'] as string) ||
       (updateDataModel?.['surfaceId'] as string) ||
+      (deleteSurface?.['surfaceId'] as string) ||
       (item['surface'] as string);
 
     if (!surfaceId) {
@@ -88,6 +91,9 @@ export function extractA2uiSurfaces(
     }
     if (updateDataModel) {
       group.updateDataModel = updateDataModel;
+    }
+    if (deleteSurface) {
+      group.deleteSurface = deleteSurface;
     }
   }
 
@@ -152,6 +158,18 @@ export function buildRenderPayload(group: A2uiSurfaceGroup): RenderA2uiItem[] {
       },
     };
     payload.push(updateDataCmd);
+  }
+
+  // 4. DeleteSurfaceCommand
+  if (group.deleteSurface) {
+    const rawDelete = group.deleteSurface;
+    const deleteCmd: DeleteSurfaceCommand = {
+      version: 'v0.9',
+      deleteSurface: {
+        surfaceId: (rawDelete['surfaceId'] as string) || group.surfaceId,
+      },
+    };
+    payload.push(deleteCmd);
   }
 
   return payload;

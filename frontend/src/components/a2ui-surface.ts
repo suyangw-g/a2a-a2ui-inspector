@@ -99,6 +99,16 @@ export function createA2uiSurfaceComponent(options: SurfaceComponentOptions): HT
     jsonInspector.appendChild(dataDetailsEl);
   }
 
+  // 4. Surface Deletion Section
+  const deleteCmd = payload.find((item) => 'deleteSurface' in item);
+  if (group.deleteSurface || deleteCmd) {
+    const deleteDetailsEl = createJsonDetailsElement(
+      '🗑️ Surface Deletion JSON (deleteSurface)',
+      group.deleteSurface || deleteCmd,
+    );
+    jsonInspector.appendChild(deleteDetailsEl);
+  }
+
   container.appendChild(jsonInspector);
   return container;
 }

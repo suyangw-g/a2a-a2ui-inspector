@@ -33,10 +33,20 @@ export interface UpdateDataModelCommand {
   updateDataModel: UpdateDataModelDetails;
 }
 
+export interface DeleteSurfaceDetails {
+  surfaceId: string;
+}
+
+export interface DeleteSurfaceCommand {
+  version: 'v0.9';
+  deleteSurface: DeleteSurfaceDetails;
+}
+
 export type RenderA2uiItem =
   | CreateSurfaceCommand
   | UpdateComponentsCommand
-  | UpdateDataModelCommand;
+  | UpdateDataModelCommand
+  | DeleteSurfaceCommand;
 
 export interface A2uiSurfaceGroup {
   surfaceId: string;
@@ -44,6 +54,7 @@ export interface A2uiSurfaceGroup {
   createSurface?: Record<string, unknown>;
   updateComponents?: Record<string, unknown>;
   updateDataModel?: Record<string, unknown>;
+  deleteSurface?: Record<string, unknown>;
   allMessages: Record<string, unknown>[];
 }
 
