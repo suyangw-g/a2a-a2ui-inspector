@@ -161,6 +161,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const newSessionBtn = document.getElementById(
     'new-session-btn',
   ) as HTMLButtonElement;
+  const expandChatBtn = document.getElementById(
+    'expand-chat-btn',
+  ) as HTMLButtonElement;
+  if (expandChatBtn) {
+    expandChatBtn.addEventListener('click', () => {
+      document.body.classList.toggle('full-page-chat');
+      const isExpanded = document.body.classList.contains('full-page-chat');
+      expandChatBtn.textContent = isExpanded ? '🗗 Exit Fullscreen' : '⛶ Expand Chat';
+    });
+  }
   const fileInput = document.getElementById('file-input') as HTMLInputElement;
   const attachBtn = document.getElementById('attach-btn') as HTMLButtonElement;
   const attachmentsPreview = document.getElementById(
@@ -979,8 +989,269 @@ document.addEventListener('DOMContentLoaded', () => {
     return renderMultimediaContent(dataUri, mimeType);
   };
 
-  const processPart = (p: any): string | null => {
+  interface SurfaceIframeRegistry {
+    surfaceId: string;
+    iframe: HTMLIFrameElement;
+    payload: any[];
+    loaded: boolean;
+  }
+
+  const activeSurfaceIframes: SurfaceIframeRegistry[] = [];
+
+  window.addEventListener('message', (event: MessageEvent) => {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    if (data.type === 'RENDERER_READY') {
+      activeSurfaceIframes.forEach(reg => {
+        if (reg.iframe.contentWindow === event.source) {
+          reg.loaded = true;
+          try {
+            reg.iframe.contentWindow.postMessage(
+              {
+                type: 'RENDER_A2UI',
+                payload: reg.payload,
+              },
+              '*',
+            );
+            console.log(
+              `[A2A Inspector] Sent RENDER_A2UI payload to surface ${reg.surfaceId}`,
+            );
+          } catch (err) {
+            console.error('[A2A Inspector] PostMessage error:', err);
+          }
+        }
+      });
+    } else if (data.type === 'SEND_TO_SERVER') {
+      console.log('[A2A Inspector] Intercepted A2UI User Action:', data.payload);
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = document.createElement('div');
+      logEntry.className = 'log-entry log-request';
+      logEntry.innerHTML = `
+        <div>
+          <span class="log-timestamp">${timestamp}</span>
+          <strong>A2UI ACTION INTERCEPTED</strong>
+        </div>
+        <pre>${DOMPurify.sanitize(JSON.stringify(data.payload, null, 2))}</pre>
+      `;
+      debugContent.appendChild(logEntry);
+      debugContent.scrollTop = debugContent.scrollHeight;
+    }
+  });
+
+  interface A2uiSurfaceGroup {
+    surfaceId: string;
+    catalogId?: string;
+    createSurface?: any;
+    updateComponents?: any;
+    updateDataModel?: any;
+    allMessages: any[];
+  }
+
+  function extractA2uiSurfaces(input: any): A2uiSurfaceGroup[] | null {
+    let items: any[] = [];
+    if (typeof input === 'string') {
+      try {
+        const parsed = JSON.parse(input);
+        if (Array.isArray(parsed)) items = parsed;
+        else if (typeof parsed === 'object' && parsed !== null) items = [parsed];
+      } catch {
+        const jsonCodeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+        let match;
+        while ((match = jsonCodeBlockRegex.exec(input)) !== null) {
+          try {
+            const obj = JSON.parse(match[1]);
+            if (Array.isArray(obj)) items.push(...obj);
+            else if (typeof obj === 'object' && obj !== null) items.push(obj);
+          } catch (e) {}
+        }
+      }
+    } else if (Array.isArray(input)) {
+      items = input;
+    } else if (typeof input === 'object' && input !== null) {
+      items = [input];
+    }
+
+    const surfaceMap = new Map<string, A2uiSurfaceGroup>();
+
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+
+      let surfaceId: string | null = null;
+      let catalogId: string | undefined = undefined;
+
+      if (item.createSurface) {
+        surfaceId = item.createSurface.surfaceId || item.surface;
+        catalogId = item.createSurface.catalogId;
+      } else if (item.updateComponents) {
+        surfaceId = item.updateComponents.surfaceId || item.surface;
+      } else if (item.updateDataModel) {
+        surfaceId = item.updateDataModel.surfaceId || item.surface;
+      } else if (item.surface) {
+        surfaceId = item.surface;
+      }
+
+      if (!surfaceId && item.version === 'v0.9') {
+        surfaceId = 'default-surface';
+      }
+
+      if (surfaceId) {
+        if (!surfaceMap.has(surfaceId)) {
+          surfaceMap.set(surfaceId, {
+            surfaceId,
+            catalogId: catalogId || 'https://a2ui.org/catalogs/basic.json',
+            allMessages: [],
+          });
+        }
+
+        const group = surfaceMap.get(surfaceId)!;
+        if (item.createSurface) {
+          group.createSurface = item.createSurface;
+          if (item.createSurface.catalogId) group.catalogId = item.createSurface.catalogId;
+        }
+        if (item.updateComponents) group.updateComponents = item.updateComponents;
+        if (item.updateDataModel) group.updateDataModel = item.updateDataModel;
+
+        const fullItem = {...item};
+        if (!fullItem.version) fullItem.version = 'v0.9';
+        group.allMessages.push(fullItem);
+      }
+    }
+
+    return surfaceMap.size > 0 ? Array.from(surfaceMap.values()) : null;
+  }
+
+  function renderA2uiSurfaceComponent(group: A2uiSurfaceGroup): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'a2ui-surface-card';
+    container.setAttribute('data-surface-id', group.surfaceId);
+
+    const header = document.createElement('div');
+    header.className = 'a2ui-surface-header';
+    header.innerHTML = `
+      <span class="a2ui-surface-badge">A2UI Surface</span>
+      <span class="a2ui-surface-id">ID: ${DOMPurify.sanitize(group.surfaceId)}</span>
+      <span class="a2ui-catalog-id">Catalog: ${DOMPurify.sanitize(group.catalogId || 'basic.json')}</span>
+    `;
+    container.appendChild(header);
+
+    const renderBox = document.createElement('div');
+    renderBox.className = 'a2ui-surface-rendered-container';
+
+    const iframe = document.createElement('iframe');
+    iframe.className = 'a2ui-surface-iframe';
+    iframe.src = '/renderer/index.html';
+    renderBox.appendChild(iframe);
+    container.appendChild(renderBox);
+
+    const payload: any[] = [];
+    
+    // 1. createSurface
+    let createDetails: any = null;
+    if (group.createSurface) {
+      createDetails = group.createSurface.createSurface || group.createSurface;
+    }
+    const surfaceId = createDetails?.surfaceId || group.surfaceId;
+    const catalogId = createDetails?.catalogId || group.catalogId || 'https://a2ui.org/catalogs/basic.json';
+
+    payload.push({
+      version: 'v0.9',
+      createSurface: {
+        surfaceId,
+        catalogId,
+      },
+    });
+
+    // 2. updateComponents
+    if (group.updateComponents) {
+      let rawComp = group.updateComponents.updateComponents || group.updateComponents;
+      const compList = Array.isArray(rawComp) ? rawComp : (rawComp.components || []);
+      payload.push({
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId,
+          components: compList,
+        },
+      });
+    }
+
+    // 3. updateDataModel
+    if (group.updateDataModel) {
+      let rawData = group.updateDataModel.updateDataModel || group.updateDataModel;
+      const dataObj = rawData.data !== undefined ? rawData.data : rawData;
+      payload.push({
+        version: 'v0.9',
+        updateDataModel: {
+          surfaceId,
+          data: dataObj,
+        },
+      });
+    }
+
+    activeSurfaceIframes.push({
+      surfaceId: group.surfaceId,
+      iframe,
+      payload,
+      loaded: false,
+    });
+
+    const jsonInspector = document.createElement('div');
+    jsonInspector.className = 'a2ui-json-inspector';
+
+    const createDetailsEl = document.createElement('details');
+    createDetailsEl.className = 'a2ui-json-details';
+    const createSummary = document.createElement('summary');
+    createSummary.textContent = '🔍 Surface Creation JSON (createSurface)';
+    createDetailsEl.appendChild(createSummary);
+    const createPre = document.createElement('pre');
+    createPre.innerHTML = `<code>${DOMPurify.sanitize(JSON.stringify(group.createSurface || payload[0].createSurface, null, 2))}</code>`;
+    createDetailsEl.appendChild(createPre);
+    jsonInspector.appendChild(createDetailsEl);
+
+    if (group.updateComponents || payload.find(p => p.updateComponents)) {
+      const compDetails = document.createElement('details');
+      compDetails.className = 'a2ui-json-details';
+      const compSummary = document.createElement('summary');
+      compSummary.textContent = '🧩 Surface Component Updates JSON (updateComponents)';
+      compDetails.appendChild(compSummary);
+      const compPre = document.createElement('pre');
+      compPre.innerHTML = `<code>${DOMPurify.sanitize(JSON.stringify(group.updateComponents || payload.find(p => p.updateComponents)?.updateComponents, null, 2))}</code>`;
+      compDetails.appendChild(compPre);
+      jsonInspector.appendChild(compDetails);
+    }
+
+    if (group.updateDataModel || payload.find(p => p.updateDataModel)) {
+      const dataDetails = document.createElement('details');
+      dataDetails.className = 'a2ui-json-details';
+      const dataSummary = document.createElement('summary');
+      dataSummary.textContent = '📊 Data Model Updates JSON (updateDataModel)';
+      dataDetails.appendChild(dataSummary);
+      const dataPre = document.createElement('pre');
+      dataPre.innerHTML = `<code>${DOMPurify.sanitize(JSON.stringify(group.updateDataModel || payload.find(p => p.updateDataModel)?.updateDataModel, null, 2))}</code>`;
+      dataDetails.appendChild(dataPre);
+      jsonInspector.appendChild(dataDetails);
+    }
+
+    container.appendChild(jsonInspector);
+    return container;
+  }
+
+  const processPart = (p: any): string | HTMLElement | null => {
     if (p.text) {
+      const surfaces = extractA2uiSurfaces(p.text);
+      if (surfaces && surfaces.length > 0) {
+        const wrapper = document.createElement('div');
+        const introText = p.text.replace(/```(?:json)?[\s\S]*?```/g, '').trim();
+        if (introText) {
+          const introDiv = document.createElement('div');
+          introDiv.innerHTML = DOMPurify.sanitize(marked.parse(introText) as string);
+          wrapper.appendChild(introDiv);
+        }
+        surfaces.forEach(s => {
+          wrapper.appendChild(renderA2uiSurfaceComponent(s));
+        });
+        return wrapper;
+      }
       return DOMPurify.sanitize(marked.parse(p.text) as string);
     } else if (p.file) {
       const {uri, bytes, mimeType} = p.file;
@@ -990,6 +1261,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return renderMultimediaContent(uri, mimeType);
       }
     } else if (p.data) {
+      const surfaces = extractA2uiSurfaces(p.data);
+      if (surfaces && surfaces.length > 0) {
+        const wrapper = document.createElement('div');
+        surfaces.forEach(s => {
+          wrapper.appendChild(renderA2uiSurfaceComponent(s));
+        });
+        return wrapper;
+      }
       const dataObj = p.data as any;
       if (dataObj.mimeType && typeof dataObj.data === 'string') {
         return renderBase64Data(dataObj.data, dataObj.mimeType);
@@ -1028,12 +1307,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     switch (event.kind) {
       case 'task': {
-        // For HTTP+JSON tasks with artifacts, display content with kind chip (like JSON-RPC messages)
         const hasArtifacts = event.artifacts && event.artifacts.length > 0;
 
         if (hasArtifacts && event.artifacts) {
-          // Collect all artifact content
-          const allContent: string[] = [];
+          const allContent: (string | HTMLElement)[] = [];
 
           event.artifacts.forEach(artifact => {
             artifact.parts?.forEach(p => {
@@ -1042,21 +1319,32 @@ document.addEventListener('DOMContentLoaded', () => {
             });
           });
 
-          // Display with kind chip for consistency with JSON-RPC messages
           if (allContent.length > 0) {
-            const combinedContent = allContent.join('');
-            const kindChip = `<span class="kind-chip kind-chip-${event.kind}">${event.kind}</span>`;
-            const messageHtml = `${kindChip} ${combinedContent}`;
+            const wrapper = document.createElement('div');
+            const kindChip = document.createElement('span');
+            kindChip.className = `kind-chip kind-chip-${event.kind}`;
+            kindChip.textContent = event.kind;
+            wrapper.appendChild(kindChip);
+            wrapper.appendChild(document.createTextNode(' '));
+
+            allContent.forEach(item => {
+              if (item instanceof HTMLElement) wrapper.appendChild(item);
+              else {
+                const span = document.createElement('span');
+                span.innerHTML = item;
+                wrapper.appendChild(span);
+              }
+            });
+
             appendMessage(
               'agent',
-              messageHtml,
+              wrapper,
               displayMessageId,
               true,
               validationErrors,
             );
           }
         } else if (event.status) {
-          // Only show task status if there are no artifacts
           const statusHtml = `<span class="kind-chip kind-chip-task">${event.kind}</span> Task created with status: ${DOMPurify.sanitize(event.status.state)}`;
           appendMessage(
             'agent progress',
@@ -1089,11 +1377,23 @@ document.addEventListener('DOMContentLoaded', () => {
         event.artifact?.parts?.forEach(p => {
           const content = processPart(p);
           if (content) {
-            const kindChip = `<span class="kind-chip kind-chip-artifact-update">${event.kind}</span>`;
-            const messageHtml = `${kindChip} ${content}`;
+            const wrapper = document.createElement('div');
+            const kindChip = document.createElement('span');
+            kindChip.className = 'kind-chip kind-chip-artifact-update';
+            kindChip.textContent = event.kind;
+            wrapper.appendChild(kindChip);
+            wrapper.appendChild(document.createTextNode(' '));
+
+            if (content instanceof HTMLElement) wrapper.appendChild(content);
+            else {
+              const span = document.createElement('span');
+              span.innerHTML = content;
+              wrapper.appendChild(span);
+            }
+
             appendMessage(
               'agent',
-              messageHtml,
+              wrapper,
               displayMessageId,
               true,
               validationErrors,
@@ -1104,13 +1404,25 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'message': {
         const textPart = event.parts?.find(p => p.text);
         if (textPart && textPart.text) {
-          const renderedContent = DOMPurify.sanitize(
-            marked.parse(textPart.text) as string,
-          );
-          const messageHtml = `<span class="kind-chip kind-chip-message">${event.kind}</span> ${renderedContent}`;
+          const processed = processPart(textPart);
+          const wrapper = document.createElement('div');
+          const kindChip = document.createElement('span');
+          kindChip.className = 'kind-chip kind-chip-message';
+          kindChip.textContent = event.kind;
+          wrapper.appendChild(kindChip);
+          wrapper.appendChild(document.createTextNode(' '));
+
+          if (processed instanceof HTMLElement) {
+            wrapper.appendChild(processed);
+          } else if (typeof processed === 'string') {
+            const span = document.createElement('span');
+            span.innerHTML = processed;
+            wrapper.appendChild(span);
+          }
+
           appendMessage(
             'agent',
-            messageHtml,
+            wrapper,
             displayMessageId,
             true,
             validationErrors,
@@ -1168,7 +1480,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function appendMessage(
     sender: string,
-    content: string,
+    content: string | HTMLElement,
     messageId: string,
     isHtml = false,
     validationErrors: string[] = [],
@@ -1201,13 +1513,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageContent = document.createElement('div');
     messageContent.className = 'message-content';
 
-    if (isHtml) {
+    if (content instanceof HTMLElement) {
+      messageContent.appendChild(content);
+    } else if (isHtml) {
       messageContent.innerHTML = content;
     } else {
       messageContent.textContent = content;
     }
 
-    if (content.trim()) {
+    if (typeof content === 'string' ? content.trim() : true) {
       messageElement.appendChild(messageContent);
     }
 
