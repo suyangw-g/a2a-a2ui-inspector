@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "esbuild src/script.ts --bundle --outfile=public/script.js --platform=browser",
+    "build:renderer": "npm_config_registry=https://registry.npmjs.org corepack yarn --cwd ../vendor/composer/bridge build && npm_config_registry=https://registry.npmjs.org corepack yarn --cwd ../vendor/composer/samples/lit-basic-catalog build && mkdir -p public/renderer && cp -r ../vendor/composer/samples/lit-basic-catalog/dist/* public/renderer/ && sed -i '' 's/src=\"\\/assets/src=\"\\.\\/assets/g' public/renderer/index.html",
+    "build": "npm run build:renderer && esbuild src/script.ts --bundle --outfile=public/script.js --platform=browser",
     "lint": "gts lint",
     "clean": "gts clean",
     "compile": "tsc",
