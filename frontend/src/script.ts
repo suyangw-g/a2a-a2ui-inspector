@@ -1046,17 +1046,38 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   const processPart = (p: any): string | HTMLElement | null => {
+    let surfaces: Map<string, A2uiSurfaceGroup> | null = null;
+    let introText = '';
+
     if (p.text) {
-      const surfaceMap = extractA2uiSurfaces(p.text);
-      if (surfaceMap && surfaceMap.size > 0) {
-        const wrapper = document.createElement('div');
-        const introText = p.text.replace(/```(?:json)?[\s\S]*?```/g, '').trim();
-        if (introText) {
-          const introDiv = document.createElement('div');
-          introDiv.innerHTML = DOMPurify.sanitize(marked.parse(introText) as string);
-          wrapper.appendChild(introDiv);
-        }
-        surfaceMap.forEach((group) => {
+      surfaces = extractA2uiSurfaces(p.text);
+      introText = p.text.replace(/(?:```(?:json)?|<a2ui-json>)[\s\S]*?(?:```|<\/a2ui-json>)/gi, '').trim();
+    } else if (p.data) {
+      surfaces = extractA2uiSurfaces(p.data);
+    }
+
+    if (surfaces && surfaces.size > 0) {
+      const wrapper = document.createElement('div');
+      if (introText) {
+        const introDiv = document.createElement('div');
+        introDiv.innerHTML = DOMPurify.sanitize(marked.parse(introText) as string);
+        wrapper.appendChild(introDiv);
+      }
+
+      surfaces.forEach((group) => {
+        const existingReg = activeSurfaceIframes.find((reg) => reg.surfaceId === group.surfaceId);
+        if (existingReg && existingReg.iframe && existingReg.iframe.contentWindow) {
+          const newPayload = buildRenderPayload(group);
+          existingReg.payload = newPayload;
+          try {
+            existingReg.iframe.contentWindow.postMessage(
+              { type: 'RENDER_A2UI', payload: newPayload },
+              '*',
+            );
+          } catch (err) {
+            console.error('[A2A Inspector] PostMessage update error:', err);
+          }
+        } else {
           const surfaceEl = createA2uiSurfaceComponent({
             group,
             onIframeCreated: (surfaceId, iframe, payload) => {
@@ -1069,9 +1090,13 @@ document.addEventListener('DOMContentLoaded', () => {
             },
           });
           wrapper.appendChild(surfaceEl);
-        });
-        return wrapper;
-      }
+        }
+      });
+
+      return wrapper.children.length > 0 ? wrapper : null;
+    }
+
+    if (p.text) {
       return DOMPurify.sanitize(marked.parse(p.text) as string);
     } else if (p.file) {
       const {uri, bytes, mimeType} = p.file;
@@ -1081,14 +1106,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return renderMultimediaContent(uri, mimeType);
       }
     } else if (p.data) {
-      const surfaces = extractA2uiSurfaces(p.data);
-      if (surfaces && surfaces.length > 0) {
-        const wrapper = document.createElement('div');
-        surfaces.forEach(s => {
-          wrapper.appendChild(renderA2uiSurfaceComponent(s));
-        });
-        return wrapper;
-      }
       const dataObj = p.data as any;
       if (dataObj.mimeType && typeof dataObj.data === 'string') {
         return renderBase64Data(dataObj.data, dataObj.mimeType);
@@ -1177,15 +1194,31 @@ document.addEventListener('DOMContentLoaded', () => {
         break;
       }
       case 'status-update': {
-        const statusText = event.status?.message?.parts?.[0]?.text;
-        if (statusText) {
-          const renderedContent = DOMPurify.sanitize(
-            marked.parse(statusText) as string,
-          );
-          const messageHtml = `<span class="kind-chip kind-chip-status-update">${event.kind}</span> Server responded with: ${renderedContent}`;
+        const parts = event.status?.message?.parts || [];
+        if (parts.length > 0) {
+          const wrapper = document.createElement('div');
+          const kindChip = document.createElement('span');
+          kindChip.className = 'kind-chip kind-chip-status-update';
+          kindChip.textContent = event.kind;
+          wrapper.appendChild(kindChip);
+          wrapper.appendChild(document.createTextNode(' '));
+
+          parts.forEach((p) => {
+            const content = processPart(p);
+            if (content) {
+              if (content instanceof HTMLElement) {
+                wrapper.appendChild(content);
+              } else {
+                const span = document.createElement('span');
+                span.innerHTML = content;
+                wrapper.appendChild(span);
+              }
+            }
+          });
+
           appendMessage(
             'agent progress',
-            messageHtml,
+            wrapper,
             displayMessageId,
             true,
             validationErrors,

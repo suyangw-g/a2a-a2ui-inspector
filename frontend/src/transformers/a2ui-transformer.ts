@@ -29,27 +29,69 @@ export function extractA2uiSurfaces(
   const items: Record<string, unknown>[] = [];
 
   if (typeof input === 'string') {
-    // Extract JSON payload from markdown code block if present
-    const jsonBlockMatch = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(input);
-    const rawJson = jsonBlockMatch ? jsonBlockMatch[1] : input;
+    // 1. Try matching <a2ui-json>...</a2ui-json> or ```json...``` blocks
+    const blockRegex = /(?:```(?:json)?|<a2ui-json>)\s*([\s\S]*?)\s*(?:```|<\/a2ui-json>)/gi;
+    let match: RegExpExecArray | null;
+    let foundBlocks = false;
 
-    try {
-      const parsed = JSON.parse(rawJson);
-      if (Array.isArray(parsed)) {
-        items.push(...parsed);
-      } else if (typeof parsed === 'object' && parsed !== null) {
-        items.push(parsed as Record<string, unknown>);
+    while ((match = blockRegex.exec(input)) !== null) {
+      foundBlocks = true;
+      try {
+        const parsed = JSON.parse(match[1].trim());
+        if (Array.isArray(parsed)) {
+          items.push(...parsed);
+        } else if (typeof parsed === 'object' && parsed !== null) {
+          items.push(parsed as Record<string, unknown>);
+        }
+      } catch (err) {
+        console.warn('[A2UI Transformer] Failed to parse matched block JSON:', err);
       }
-    } catch {
-      return surfaceMap; // Text is plain text, not A2UI payload
     }
+
+    // 2. If no block tags matched, try parsing the whole input string directly
+    if (!foundBlocks) {
+      try {
+        const parsed = JSON.parse(input.trim());
+        if (Array.isArray(parsed)) {
+          items.push(...parsed);
+        } else if (typeof parsed === 'object' && parsed !== null) {
+          items.push(parsed as Record<string, unknown>);
+        }
+      } catch {
+        // Also try scanning for any standalone JSON array or object substring
+        const jsonSubstringRegex = /(\[[\s\S]*\]|\{[\s\S]*\})/g;
+        let subMatch: RegExpExecArray | null;
+        while ((subMatch = jsonSubstringRegex.exec(input)) !== null) {
+          try {
+            const parsed = JSON.parse(subMatch[1].trim());
+            if (Array.isArray(parsed)) {
+              items.push(...parsed);
+            } else if (typeof parsed === 'object' && parsed !== null) {
+              items.push(parsed as Record<string, unknown>);
+            }
+          } catch {
+            // Ignore non-JSON substrings
+          }
+        }
+      }
+    }
+  } else if (Array.isArray(input)) {
+    items.push(...input);
   } else if (typeof input === 'object' && input !== null) {
-    items.push(input);
+    items.push(input as Record<string, unknown>);
   }
 
-  // Filter and group A2UI v0.9 messages by surfaceId
+  // Filter and group A2UI v0.8 and v0.9 messages by surfaceId
   for (const item of items) {
-    if (item['version'] !== 'v0.9') {
+    const version = String(item['version'] || '');
+    const isA2ui =
+      version.includes('0.9') ||
+      version.includes('0.8') ||
+      item['createSurface'] !== undefined ||
+      item['updateComponents'] !== undefined ||
+      item['updateDataModel'] !== undefined;
+
+    if (!isA2ui) {
       continue;
     }
 
@@ -63,11 +105,8 @@ export function extractA2uiSurfaces(
       (updateComponents?.['surfaceId'] as string) ||
       (updateDataModel?.['surfaceId'] as string) ||
       (deleteSurface?.['surfaceId'] as string) ||
-      (item['surface'] as string);
-
-    if (!surfaceId) {
-      continue;
-    }
+      (item['surface'] as string) ||
+      'default';
 
     if (!surfaceMap.has(surfaceId)) {
       surfaceMap.set(surfaceId, {
@@ -108,6 +147,10 @@ export function extractA2uiSurfaces(
  * @return Array of single-command items formatted for PreviewBridge.
  */
 export function buildRenderPayload(group: A2uiSurfaceGroup): RenderA2uiItem[] {
+  if (group.allMessages && group.allMessages.length > 0) {
+    return group.allMessages as unknown as RenderA2uiItem[];
+  }
+
   const payload: RenderA2uiItem[] = [];
 
   // 1. CreateSurfaceCommand

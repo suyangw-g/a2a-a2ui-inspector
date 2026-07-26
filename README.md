@@ -4,11 +4,11 @@ An inspection and validation tool for **Agent-to-Agent (A2A) protocol** communic
 
 ---
 
-## 🎬 End-to-End Demo Video
+## 🎬 End-to-End Visual UI Demo Video
 
-Below is an interactive video demonstration showing A2A Inspector connected to the official A2UI ADK `restaurant_finder` agent on port `10002`:
+Below is an interactive video demonstration showing A2A Inspector connected to the official A2UI ADK `restaurant_finder` agent on port `10002` with visual A2UI surface card rendering:
 
-![A2A Inspector A2UI ADK Demo Video](file:///Users/suyangw/.gemini/jetski/brain/91539e85-d600-4d6e-94ca-16e2dd545043/a2ui_adk_demo_1785046300179.webp)
+![A2A Inspector A2UI ADK Demo Video](file:///Users/suyangw/.gemini/jetski/brain/91539e85-d600-4d6e-94ca-16e2dd545043/a2ui_rendered_ui_success_1785047642595.webp)
 
 ---
 
