@@ -1058,42 +1058,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (surfaces && surfaces.size > 0) {
       const wrapper = document.createElement('div');
-      if (introText) {
+      const trimmedIntro = introText.trim();
+      const isRawJsonString = trimmedIntro.startsWith('[') || trimmedIntro.startsWith('{');
+      if (trimmedIntro && !isRawJsonString) {
         const introDiv = document.createElement('div');
-        introDiv.innerHTML = DOMPurify.sanitize(marked.parse(introText) as string);
+        introDiv.innerHTML = DOMPurify.sanitize(marked.parse(trimmedIntro) as string);
         wrapper.appendChild(introDiv);
       }
 
       surfaces.forEach((group) => {
-        const existingReg = activeSurfaceIframes.find((reg) => reg.surfaceId === group.surfaceId);
-        if (existingReg && existingReg.iframe && existingReg.iframe.contentWindow) {
-          const newPayload = buildRenderPayload(group);
-          existingReg.payload = newPayload;
-          try {
-            existingReg.iframe.contentWindow.postMessage(
-              { type: 'RENDER_A2UI', payload: newPayload },
-              '*',
-            );
-          } catch (err) {
-            console.error('[A2A Inspector] PostMessage update error:', err);
-          }
-        } else {
-          const surfaceEl = createA2uiSurfaceComponent({
-            group,
-            onIframeCreated: (surfaceId, iframe, payload) => {
-              activeSurfaceIframes.push({
-                surfaceId,
-                iframe,
-                payload,
-                loaded: false,
-              });
-            },
-          });
-          wrapper.appendChild(surfaceEl);
-        }
+        const surfaceEl = createA2uiSurfaceComponent({
+          group,
+          onIframeCreated: (surfaceId, iframe, payload) => {
+            activeSurfaceIframes.push({
+              surfaceId,
+              iframe,
+              payload,
+              loaded: false,
+            });
+          },
+        });
+        wrapper.appendChild(surfaceEl);
       });
 
-      return wrapper.children.length > 0 ? wrapper : null;
+      return wrapper;
     }
 
     if (p.text) {
@@ -1395,11 +1383,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     messageElement.addEventListener('click', (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName !== 'A') {
-        const jsonData =
-          sender === 'user'
-            ? rawLogStore[messageId]?.request
-            : messageJsonStore[messageId];
+      if (
+        target.closest('.a2ui-surface-card') ||
+        target.closest('.a2ui-json-inspector') ||
+        target.tagName === 'IFRAME' ||
+        target.tagName === 'A'
+      ) {
+        return;
+      }
+      const jsonData =
+        sender === 'user'
+          ? rawLogStore[messageId]?.request
+          : messageJsonStore[messageId];
+      if (jsonData) {
         showJsonInModal(jsonData);
       }
     });

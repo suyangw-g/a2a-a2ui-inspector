@@ -78,7 +78,14 @@ export function extractA2uiSurfaces(
   } else if (Array.isArray(input)) {
     items.push(...input);
   } else if (typeof input === 'object' && input !== null) {
-    items.push(input as Record<string, unknown>);
+    const obj = input as Record<string, unknown>;
+    if (Array.isArray(obj['data'])) {
+      items.push(...(obj['data'] as Record<string, unknown>[]));
+    } else if (obj['data'] && typeof obj['data'] === 'object') {
+      items.push(obj['data'] as Record<string, unknown>);
+    } else {
+      items.push(obj);
+    }
   }
 
   // Filter and group A2UI v0.8 and v0.9 messages by surfaceId
