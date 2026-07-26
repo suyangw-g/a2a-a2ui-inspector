@@ -71,7 +71,9 @@ uv run .
 
 ## 📁 Project Structure
 
+- **[`CHANGES_OVER_UPSTREAM.md`](./CHANGES_OVER_UPSTREAM.md)**: Detailed breakdown of features, architecture extensions, and modifications over upstream `a2a-inspector`.
 - **[`backend/`](./backend/README.md)**: FastAPI application server, Socket.IO handlers, and proxy endpoints.
 - **[`frontend/`](./frontend/README.md)**: Frontend source code, build scripts, and static renderer assets.
   - **[`frontend/src/`](./frontend/src/README.md)**: TypeScript modules (`a2ui-transformer.ts`, `a2ui-surface.ts`, `full-page-chat.ts`).
   - **[`frontend/public/renderer/`](./frontend/public/renderer/README.md)**: Embedded A2UI Composer Lit basic catalog renderer.
+
