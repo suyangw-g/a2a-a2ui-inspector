@@ -1067,21 +1067,41 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       surfaces.forEach((group) => {
-        const surfaceEl = createA2uiSurfaceComponent({
-          group,
-          onIframeCreated: (surfaceId, iframe, payload) => {
-            activeSurfaceIframes.push({
-              surfaceId,
-              iframe,
-              payload,
-              loaded: false,
-            });
-          },
-        });
-        wrapper.appendChild(surfaceEl);
+        const existingReg = activeSurfaceIframes.find(
+          (reg) => reg.surfaceId === group.surfaceId && reg.iframe && reg.iframe.isConnected,
+        );
+        if (existingReg && existingReg.iframe.contentWindow) {
+          const newPayload = buildRenderPayload(group);
+          existingReg.payload = newPayload;
+          try {
+            existingReg.iframe.contentWindow.postMessage(
+              { type: 'RENDER_A2UI', payload: newPayload },
+              '*',
+            );
+          } catch (err) {
+            console.error('[A2A Inspector] PostMessage update error:', err);
+          }
+        } else {
+          const surfaceEl = createA2uiSurfaceComponent({
+            group,
+            onIframeCreated: (surfaceId, iframe, payload) => {
+              const existingIdx = activeSurfaceIframes.findIndex((r) => r.surfaceId === surfaceId);
+              if (existingIdx !== -1) {
+                activeSurfaceIframes.splice(existingIdx, 1);
+              }
+              activeSurfaceIframes.push({
+                surfaceId,
+                iframe,
+                payload,
+                loaded: false,
+              });
+            },
+          });
+          wrapper.appendChild(surfaceEl);
+        }
       });
 
-      return wrapper;
+      return wrapper.children.length > 0 ? wrapper : null;
     }
 
     if (p.text) {
