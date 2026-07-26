@@ -30,7 +30,8 @@ export function extractA2uiSurfaces(
 
   if (typeof input === 'string') {
     // 1. Try matching <a2ui-json>...</a2ui-json> or ```json...``` blocks
-    const blockRegex = /(?:```(?:json)?|<a2ui-json>)\s*([\s\S]*?)\s*(?:```|<\/a2ui-json>)/gi;
+    const blockRegex =
+      /(?:```(?:json)?|<a2ui-json>)\s*([\s\S]*?)\s*(?:```|<\/a2ui-json>)/gi;
     let match: RegExpExecArray | null;
     let foundBlocks = false;
 
@@ -44,7 +45,10 @@ export function extractA2uiSurfaces(
           items.push(parsed as Record<string, unknown>);
         }
       } catch (err) {
-        console.warn('[A2UI Transformer] Failed to parse matched block JSON:', err);
+        console.warn(
+          '[A2UI Transformer] Failed to parse matched block JSON:',
+          err,
+        );
       }
     }
 
@@ -102,10 +106,18 @@ export function extractA2uiSurfaces(
       continue;
     }
 
-    const createSurface = item['createSurface'] as Record<string, unknown> | undefined;
-    const updateComponents = item['updateComponents'] as Record<string, unknown> | undefined;
-    const updateDataModel = item['updateDataModel'] as Record<string, unknown> | undefined;
-    const deleteSurface = item['deleteSurface'] as Record<string, unknown> | undefined;
+    const createSurface = item['createSurface'] as
+      | Record<string, unknown>
+      | undefined;
+    const updateComponents = item['updateComponents'] as
+      | Record<string, unknown>
+      | undefined;
+    const updateDataModel = item['updateDataModel'] as
+      | Record<string, unknown>
+      | undefined;
+    const deleteSurface = item['deleteSurface'] as
+      | Record<string, unknown>
+      | undefined;
 
     const surfaceId =
       (createSurface?.['surfaceId'] as string) ||
@@ -118,7 +130,8 @@ export function extractA2uiSurfaces(
     if (!surfaceMap.has(surfaceId)) {
       surfaceMap.set(surfaceId, {
         surfaceId,
-        catalogId: (createSurface?.['catalogId'] as string) || DEFAULT_CATALOG_ID,
+        catalogId:
+          (createSurface?.['catalogId'] as string) || DEFAULT_CATALOG_ID,
         allMessages: [],
       });
     }
@@ -164,7 +177,9 @@ export function buildRenderPayload(group: A2uiSurfaceGroup): RenderA2uiItem[] {
   const createDetails = group.createSurface;
   const surfaceId = (createDetails?.['surfaceId'] as string) || group.surfaceId;
   const catalogId =
-    (createDetails?.['catalogId'] as string) || group.catalogId || DEFAULT_CATALOG_ID;
+    (createDetails?.['catalogId'] as string) ||
+    group.catalogId ||
+    DEFAULT_CATALOG_ID;
 
   const createCmd: CreateSurfaceCommand = {
     version: 'v0.9',
@@ -180,7 +195,7 @@ export function buildRenderPayload(group: A2uiSurfaceGroup): RenderA2uiItem[] {
     const rawComp = group.updateComponents;
     const compList = Array.isArray(rawComp)
       ? rawComp
-      : ((rawComp['components'] as unknown[]) || []);
+      : (rawComp['components'] as unknown[]) || [];
 
     const updateCompCmd: UpdateComponentsCommand = {
       version: 'v0.9',

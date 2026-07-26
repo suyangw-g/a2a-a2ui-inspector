@@ -1,7 +1,6 @@
 import {io} from 'socket.io-client';
 import {marked} from 'marked';
 import DOMPurify from 'dompurify';
-import {RenderA2uiItem} from './types/a2ui';
 import {extractA2uiSurfaces} from './transformers/a2ui-transformer';
 import {createA2uiSurfaceComponent} from './components/a2ui-surface';
 import {setupFullPageChatToggle} from './components/full-page-chat';
@@ -1021,7 +1020,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     } else if (data.type === 'SEND_TO_SERVER') {
-      console.log('[A2A Inspector] Intercepted A2UI User Action:', data.payload);
+      console.log(
+        '[A2A Inspector] Intercepted A2UI User Action:',
+        data.payload,
+      );
       const timestamp = new Date().toLocaleTimeString();
       const logEntry = document.createElement('div');
       logEntry.className = 'log-entry log-request';
@@ -1036,10 +1038,15 @@ document.addEventListener('DOMContentLoaded', () => {
       debugContent.scrollTop = debugContent.scrollHeight;
 
       // Populate chat input box with the intercepted action JSON for seamless agent interaction
-      const chatInput = document.getElementById('chat-input') as HTMLInputElement | HTMLTextAreaElement;
+      const chatInput = document.getElementById('chat-input') as
+        | HTMLInputElement
+        | HTMLTextAreaElement;
       if (chatInput && data.payload) {
         const actionData = data.payload.action || data.payload;
-        chatInput.value = typeof actionData === 'string' ? actionData : JSON.stringify(actionData);
+        chatInput.value =
+          typeof actionData === 'string'
+            ? actionData
+            : JSON.stringify(actionData);
         chatInput.focus();
       }
     }
@@ -1051,7 +1058,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (p.text) {
       surfaces = extractA2uiSurfaces(p.text);
-      introText = p.text.replace(/(?:```(?:json)?|<a2ui-json>)[\s\S]*?(?:```|<\/a2ui-json>)/gi, '').trim();
+      introText = p.text
+        .replace(
+          /(?:```(?:json)?|<a2ui-json>)[\s\S]*?(?:```|<\/a2ui-json>)/gi,
+          '',
+        )
+        .trim();
     } else if (p.data) {
       surfaces = extractA2uiSurfaces(p.data);
     }
@@ -1059,23 +1071,29 @@ document.addEventListener('DOMContentLoaded', () => {
     if (surfaces && surfaces.size > 0) {
       const wrapper = document.createElement('div');
       const trimmedIntro = introText.trim();
-      const isRawJsonString = trimmedIntro.startsWith('[') || trimmedIntro.startsWith('{');
+      const isRawJsonString =
+        trimmedIntro.startsWith('[') || trimmedIntro.startsWith('{');
       if (trimmedIntro && !isRawJsonString) {
         const introDiv = document.createElement('div');
-        introDiv.innerHTML = DOMPurify.sanitize(marked.parse(trimmedIntro) as string);
+        introDiv.innerHTML = DOMPurify.sanitize(
+          marked.parse(trimmedIntro) as string,
+        );
         wrapper.appendChild(introDiv);
       }
 
-      surfaces.forEach((group) => {
+      surfaces.forEach(group => {
         const existingReg = activeSurfaceIframes.find(
-          (reg) => reg.surfaceId === group.surfaceId && reg.iframe && reg.iframe.isConnected,
+          reg =>
+            reg.surfaceId === group.surfaceId &&
+            reg.iframe &&
+            reg.iframe.isConnected,
         );
         if (existingReg && existingReg.iframe.contentWindow) {
           const newPayload = buildRenderPayload(group);
           existingReg.payload = newPayload;
           try {
             existingReg.iframe.contentWindow.postMessage(
-              { type: 'RENDER_A2UI', payload: newPayload },
+              {type: 'RENDER_A2UI', payload: newPayload},
               '*',
             );
           } catch (err) {
@@ -1085,7 +1103,9 @@ document.addEventListener('DOMContentLoaded', () => {
           const surfaceEl = createA2uiSurfaceComponent({
             group,
             onIframeCreated: (surfaceId, iframe, payload) => {
-              const existingIdx = activeSurfaceIframes.findIndex((r) => r.surfaceId === surfaceId);
+              const existingIdx = activeSurfaceIframes.findIndex(
+                r => r.surfaceId === surfaceId,
+              );
               if (existingIdx !== -1) {
                 activeSurfaceIframes.splice(existingIdx, 1);
               }
@@ -1211,7 +1231,7 @@ document.addEventListener('DOMContentLoaded', () => {
           wrapper.appendChild(kindChip);
           wrapper.appendChild(document.createTextNode(' '));
 
-          parts.forEach((p) => {
+          parts.forEach(p => {
             const content = processPart(p);
             if (content) {
               if (content instanceof HTMLElement) {

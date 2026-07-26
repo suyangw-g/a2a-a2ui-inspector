@@ -5,13 +5,17 @@
  */
 
 import DOMPurify from 'dompurify';
-import { A2uiSurfaceGroup, RenderA2uiItem } from '../types/a2ui';
-import { buildRenderPayload } from '../transformers/a2ui-transformer';
+import {A2uiSurfaceGroup, RenderA2uiItem} from '../types/a2ui';
+import {buildRenderPayload} from '../transformers/a2ui-transformer';
 
 export interface SurfaceComponentOptions {
   group: A2uiSurfaceGroup;
   rendererUrl?: string;
-  onIframeCreated?: (surfaceId: string, iframe: HTMLIFrameElement, payload: RenderA2uiItem[]) => void;
+  onIframeCreated?: (
+    surfaceId: string,
+    iframe: HTMLIFrameElement,
+    payload: RenderA2uiItem[],
+  ) => void;
 }
 
 /**
@@ -20,8 +24,14 @@ export interface SurfaceComponentOptions {
  * @param options Options containing surface group data and callbacks.
  * @return Fully constructed HTMLDivElement.
  */
-export function createA2uiSurfaceComponent(options: SurfaceComponentOptions): HTMLDivElement {
-  const { group, rendererUrl = '/renderer/index.html', onIframeCreated } = options;
+export function createA2uiSurfaceComponent(
+  options: SurfaceComponentOptions,
+): HTMLDivElement {
+  const {
+    group,
+    rendererUrl = '/renderer/index.html',
+    onIframeCreated,
+  } = options;
   const payload = buildRenderPayload(group);
 
   const container = document.createElement('div');
@@ -80,7 +90,7 @@ export function createA2uiSurfaceComponent(options: SurfaceComponentOptions): HT
   jsonInspector.appendChild(createDetailsEl);
 
   // 2. Surface Component Updates Section
-  const compCmd = payload.find((item) => 'updateComponents' in item);
+  const compCmd = payload.find(item => 'updateComponents' in item);
   if (group.updateComponents || compCmd) {
     const compDetailsEl = createJsonDetailsElement(
       '🧩 Surface Component Updates JSON (updateComponents)',
@@ -90,7 +100,7 @@ export function createA2uiSurfaceComponent(options: SurfaceComponentOptions): HT
   }
 
   // 3. Data Model Updates Section
-  const dataCmd = payload.find((item) => 'updateDataModel' in item);
+  const dataCmd = payload.find(item => 'updateDataModel' in item);
   if (group.updateDataModel || dataCmd) {
     const dataDetailsEl = createJsonDetailsElement(
       '📊 Data Model Updates JSON (updateDataModel)',
@@ -100,7 +110,7 @@ export function createA2uiSurfaceComponent(options: SurfaceComponentOptions): HT
   }
 
   // 4. Surface Deletion Section
-  const deleteCmd = payload.find((item) => 'deleteSurface' in item);
+  const deleteCmd = payload.find(item => 'deleteSurface' in item);
   if (group.deleteSurface || deleteCmd) {
     const deleteDetailsEl = createJsonDetailsElement(
       '🗑️ Surface Deletion JSON (deleteSurface)',
@@ -116,7 +126,10 @@ export function createA2uiSurfaceComponent(options: SurfaceComponentOptions): HT
 /**
  * Creates a collapsible <details> element containing formatted & sanitized JSON.
  */
-function createJsonDetailsElement(summaryText: string, jsonObject: unknown): HTMLDetailsElement {
+function createJsonDetailsElement(
+  summaryText: string,
+  jsonObject: unknown,
+): HTMLDetailsElement {
   const details = document.createElement('details');
   details.className = 'a2ui-json-details';
 
